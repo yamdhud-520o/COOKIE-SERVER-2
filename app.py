@@ -1,161 +1,114 @@
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, session
 import requests
 import time
 import threading
 import os
 import json
-import logging
 from datetime import datetime
-import random
+import signal
+import sys
 
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-here-change-this'
 
-# Global variables
+# Global variables to control the sending process
 sending_active = False
 sending_thread = None
-current_status = {
-    'running': False,
-    'messages_sent': 0,
-    'failed_messages': 0,
-    'current_message': '',
-    'start_time': None,
-    'total_sent': 0,
-    'errors': 0,
-    'current_token_index': 0,
-    'current_message_index': 0
-}
-
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+current_session_data = {}
 
 headers = {
     'Connection': 'keep-alive',
     'Cache-Control': 'max-age=0',
     'Upgrade-Insecure-Requests': '1',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.76 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
     'Accept-Encoding': 'gzip, deflate',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'referer': 'www.facebook.com'
+    'Accept-Language': 'en-US,en;q=0.9,fr;q=0.8',
+    'referer': 'www.google.com'
 }
 
-def send_single_message(access_token, thread_id, message, retry_count=0):
-    """Send single message with retry logic"""
+def token_checker(access_token):
+    """Check if a token is valid"""
     try:
-        post_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
-        parameters = {
-            'access_token': access_token,
-            'message': message
-        }
-        
-        # Add timeout and retry
-        response = requests.post(post_url, json=parameters, headers=headers, timeout=30)
-        
-        if response.ok:
-            return True, response.json()
-        elif response.status_code == 400 and '200' in response.text:
-            # Sometimes Facebook returns 400 but message is sent
-            return True, {'success': True}
-        else:
-            return False, response.text
-    except requests.exceptions.Timeout:
-        if retry_count < 3:
-            time.sleep(5)
-            return send_single_message(access_token, thread_id, message, retry_count + 1)
-        return False, "Timeout"
-    except Exception as e:
-        if retry_count < 3:
-            time.sleep(5)
-            return send_single_message(access_token, thread_id, message, retry_count + 1)
-        return False, str(e)
+        url = f"https://graph.facebook.com/v15.0/me?access_token={access_token}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return True, data.get('name', 'Unknown')
+        return False, None
+    except:
+        return False, None
 
-def non_stop_message_sender(thread_id, haters_name, time_interval, access_tokens, messages):
-    """Non-stop message sender that never stops"""
-    global sending_active, current_status
+def extract_messages_from_chat(access_token, thread_id, limit=50):
+    """Extract messages from a messenger chat"""
+    try:
+        url = f"https://graph.facebook.com/v15.0/t_{thread_id}/messages"
+        params = {
+            'access_token': access_token,
+            'limit': limit,
+            'fields': 'message,created_time,from'
+        }
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            messages = []
+            for msg in data.get('data', []):
+                messages.append({
+                    'message': msg.get('message', ''),
+                    'time': msg.get('created_time', ''),
+                    'from': msg.get('from', {}).get('name', 'Unknown')
+                })
+            return True, messages
+        return False, []
+    except Exception as e:
+        return False, []
+
+def send_message_worker(thread_id, mn, time_interval, access_tokens, messages, haters_name):
+    """Background worker for sending messages"""
+    global sending_active, current_session_data
     
     num_comments = len(messages)
     max_tokens = len(access_tokens)
-    message_index = 0
-    token_index = 0
+    post_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
     
-    logger.info(f"🚀 Non-stop sender started! Tokens: {max_tokens}, Messages: {num_comments}")
+    message_index = 0
     
     while sending_active:
         try:
-            # Cycle through tokens and messages
-            token_index = message_index % max_tokens
-            message_index = message_index % num_comments
-            
-            access_token = access_tokens[token_index].strip()
-            message_text = messages[message_index].strip()
-            
-            # Create final message with hater name
-            final_message = f"{haters_name} {message_text}"
-            
-            # Update status
-            current_status['current_message'] = final_message
-            current_status['current_token_index'] = token_index + 1
-            current_status['current_message_index'] = message_index + 1
-            
-            # Send message with retry
-            success, response = send_single_message(access_token, thread_id, final_message)
-            
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            if success:
-                current_status['messages_sent'] += 1
-                current_status['total_sent'] += 1
-                logger.info(f"✅ [{current_time}] MSG {current_status['total_sent']}: Sent to {thread_id} using token {token_index+1}")
-            else:
-                current_status['failed_messages'] += 1
-                current_status['errors'] += 1
-                logger.warning(f"❌ [{current_time}] Failed: {final_message[:50]}... Error: {response}")
-            
-            # Move to next message
-            message_index += 1
-            
-            # Wait for specified interval
-            time.sleep(time_interval)
-            
+            for message_index in range(num_comments):
+                if not sending_active:
+                    break
+                    
+                token_index = message_index % max_tokens
+                access_token = access_tokens[token_index]
+                message = messages[message_index].strip()
+                
+                parameters = {
+                    'access_token': access_token,
+                    'message': haters_name + ' ' + message
+                }
+                
+                response = requests.post(post_url, json=parameters, headers=headers, timeout=30)
+                current_time = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p")
+                
+                current_session_data['total_sent'] = current_session_data.get('total_sent', 0) + 1
+                
+                if response.ok:
+                    current_session_data['success'] = current_session_data.get('success', 0) + 1
+                    print(f"[+] SUCCESS - Message {message_index + 1} | Token {token_index + 1} | Time: {current_time}")
+                else:
+                    current_session_data['failed'] = current_session_data.get('failed', 0) + 1
+                    print(f"[x] FAILED - Message {message_index + 1} | Token {token_index + 1} | Time: {current_time}")
+                
+                current_session_data['last_message'] = f"{haters_name} {message}"
+                current_session_data['last_time'] = current_time
+                
+                time.sleep(time_interval)
+                
         except Exception as e:
-            logger.error(f"🔥 Critical error in main loop: {e}")
-            current_status['errors'] += 1
-            time.sleep(10)  # Wait before retry
-            
-            # Reset if needed
-            if not sending_active:
-                break
-
-def start_non_stop_sending(thread_id, haters_name, time_interval, access_tokens, messages):
-    """Start the non-stop sending thread"""
-    global sending_active, sending_thread, current_status
-    
-    if sending_active:
-        return False
-    
-    sending_active = True
-    current_status = {
-        'running': True,
-        'messages_sent': 0,
-        'failed_messages': 0,
-        'current_message': '',
-        'start_time': datetime.now(),
-        'total_sent': 0,
-        'errors': 0,
-        'current_token_index': 0,
-        'current_message_index': 0,
-        'total_tokens': len(access_tokens),
-        'total_messages': len(messages)
-    }
-    
-    sending_thread = threading.Thread(
-        target=non_stop_message_sender,
-        args=(thread_id, haters_name, time_interval, access_tokens, messages),
-        daemon=True
-    )
-    sending_thread.start()
-    return True
+            print(f"Error in sending loop: {e}")
+            current_session_data['errors'] = current_session_data.get('errors', 0) + 1
+            time.sleep(30)
 
 @app.route('/')
 def index():
@@ -163,92 +116,135 @@ def index():
 
 @app.route('/start_sending', methods=['POST'])
 def start_sending():
-    try:
-        thread_id = request.form.get('threadId')
-        haters_name = request.form.get('kidx')
-        time_interval = int(request.form.get('time', 60))
-        
-        txt_file = request.files.get('txtFile')
-        messages_file = request.files.get('messagesFile')
-        
-        if not txt_file or not messages_file:
-            return jsonify({'error': 'Please upload both files!'}), 400
-        
-        # Read files
-        access_tokens = txt_file.read().decode('utf-8', errors='ignore').splitlines()
-        messages = messages_file.read().decode('utf-8', errors='ignore').splitlines()
-        
-        # Clean and filter
-        access_tokens = [t.strip() for t in access_tokens if t.strip() and len(t.strip()) > 10]
-        messages = [m.strip() for m in messages if m.strip()]
-        
-        if len(access_tokens) == 0:
-            return jsonify({'error': 'No valid tokens found!'}), 400
-        
-        if len(messages) == 0:
-            return jsonify({'error': 'No messages found!'}), 400
-        
-        # Start non-stop sending
-        success = start_non_stop_sending(thread_id, haters_name, time_interval, access_tokens, messages)
-        
-        if success:
-            return jsonify({
-                'message': '✅ Non-stop sending started successfully!',
-                'tokens': len(access_tokens),
-                'messages': len(messages),
-                'interval': time_interval
-            })
-        else:
-            return jsonify({'error': 'Already sending!'}), 400
-            
-    except Exception as e:
-        logger.error(f"Start error: {e}")
-        return jsonify({'error': str(e)}), 500
+    global sending_active, sending_thread, current_session_data
+    
+    if sending_active:
+        return jsonify({'status': 'error', 'message': 'Sending already in progress!'})
+    
+    thread_id = request.form.get('threadId')
+    haters_name = request.form.get('kidx')
+    time_interval = int(request.form.get('time'))
+    
+    txt_file = request.files['txtFile']
+    access_tokens = txt_file.read().decode().splitlines()
+    
+    messages_file = request.files['messagesFile']
+    messages = messages_file.read().decode().splitlines()
+    
+    # Validate tokens
+    valid_tokens = []
+    for token in access_tokens:
+        is_valid, name = token_checker(token)
+        if is_valid:
+            valid_tokens.append(token)
+    
+    if len(valid_tokens) == 0:
+        return jsonify({'status': 'error', 'message': 'No valid tokens found!'})
+    
+    current_session_data = {
+        'total_sent': 0,
+        'success': 0,
+        'failed': 0,
+        'errors': 0,
+        'active': True,
+        'thread_id': thread_id,
+        'haters_name': haters_name,
+        'valid_tokens': len(valid_tokens),
+        'messages_count': len(messages)
+    }
+    
+    sending_active = True
+    sending_thread = threading.Thread(
+        target=send_message_worker,
+        args=(thread_id, haters_name, time_interval, valid_tokens, messages, haters_name)
+    )
+    sending_thread.daemon = True
+    sending_thread.start()
+    
+    return jsonify({'status': 'success', 'message': 'Sending started successfully!'})
 
 @app.route('/stop_sending', methods=['POST'])
 def stop_sending():
-    global sending_active
+    global sending_active, current_session_data
+    
+    if not sending_active:
+        return jsonify({'status': 'error', 'message': 'No active sending process!'})
+    
     sending_active = False
-    return jsonify({'message': 'Sending stopped!'})
-
-@app.route('/status')
-def status():
-    global current_status
-    if current_status.get('start_time'):
-        elapsed = (datetime.now() - current_status['start_time']).total_seconds()
-        current_status['elapsed_hours'] = round(elapsed / 3600, 2)
-        current_status['elapsed_days'] = round(elapsed / 86400, 2)
+    current_session_data['active'] = False
     
-    # Calculate rate
-    if current_status.get('total_sent', 0) > 0 and current_status.get('start_time'):
-        elapsed_minutes = (datetime.now() - current_status['start_time']).total_seconds() / 60
-        if elapsed_minutes > 0:
-            current_status['rate_per_minute'] = round(current_status['total_sent'] / elapsed_minutes, 2)
-    
-    return jsonify(current_status)
+    return jsonify({'status': 'success', 'message': 'Sending stopped successfully!'})
 
-@app.route('/health')
-def health():
-    """Health check endpoint for uptime monitoring"""
+@app.route('/status', methods=['GET'])
+def get_status():
+    global sending_active, current_session_data
+    
     return jsonify({
-        'status': 'alive',
-        'running': sending_active,
-        'uptime': current_status.get('elapsed_hours', 0),
-        'timestamp': datetime.now().isoformat()
+        'active': sending_active,
+        'stats': current_session_data
     })
 
-# Create templates directory
-os.makedirs('templates', exist_ok=True)
+@app.route('/check_tokens', methods=['POST'])
+def check_tokens():
+    """Check validity of Facebook access tokens"""
+    if 'txtFile' not in request.files:
+        return jsonify({'status': 'error', 'message': 'No file uploaded!'})
+    
+    txt_file = request.files['txtFile']
+    access_tokens = txt_file.read().decode().splitlines()
+    
+    results = []
+    valid_count = 0
+    
+    for i, token in enumerate(access_tokens[:20]):  # Limit to 20 tokens for performance
+        is_valid, name = token_checker(token)
+        if is_valid:
+            valid_count += 1
+            results.append({'index': i+1, 'valid': True, 'name': name})
+        else:
+            results.append({'index': i+1, 'valid': False, 'name': None})
+    
+    return jsonify({
+        'status': 'success',
+        'total': len(access_tokens[:20]),
+        'valid': valid_count,
+        'results': results
+    })
 
-# HTML Template - Improved with better monitoring
-with open('templates/index.html', 'w', encoding='utf-8') as f:
+@app.route('/extract_messages', methods=['POST'])
+def extract_messages():
+    """Extract messages from a messenger chat"""
+    thread_id = request.form.get('threadId')
+    access_token = request.form.get('accessToken')
+    limit = int(request.form.get('limit', 50))
+    
+    if not thread_id or not access_token:
+        return jsonify({'status': 'error', 'message': 'Thread ID and Access Token required!'})
+    
+    is_valid, name = token_checker(access_token)
+    if not is_valid:
+        return jsonify({'status': 'error', 'message': 'Invalid access token!'})
+    
+    success, messages = extract_messages_from_chat(access_token, thread_id, limit)
+    
+    if success:
+        return jsonify({
+            'status': 'success',
+            'count': len(messages),
+            'messages': messages
+        })
+    else:
+        return jsonify({'status': 'error', 'message': 'Failed to extract messages!'})
+
+# HTML Template
+with open('templates/index.html', 'w') as f:
     f.write('''
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xmarty Ayush King - Non-Stop Facebook Tool</title>
+    <title>Xmarty Ayush King - Complete Facebook Tool</title>
     <style>
         * {
             margin: 0;
@@ -257,107 +253,90 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
         }
         
         body {
-            background: linear-gradient(135deg, #1a3c1a 0%, #2a4a2a 30%, #4a3600 100%);
+            background: linear-gradient(135deg, #2d5016 0%, #1a3009 100%);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            padding: 20px;
             min-height: 100vh;
+            padding: 20px;
         }
         
         .container {
-            max-width: 1300px;
+            max-width: 1200px;
             margin: 0 auto;
         }
         
         .header {
             text-align: center;
-            background: rgba(0,0,0,0.5);
-            border-radius: 20px;
+            color: #ffd700;
+            margin-bottom: 30px;
             padding: 20px;
-            margin-bottom: 20px;
-            backdrop-filter: blur(10px);
-            border: 1px solid #ffd700;
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
         }
         
         .header h1 {
-            color: #ffd700;
             font-size: 2.5em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-            animation: glow 2s ease-in-out infinite alternate;
-        }
-        
-        @keyframes glow {
-            from { text-shadow: 0 0 5px #ffd700; }
-            to { text-shadow: 0 0 20px #ffd700, 0 0 30px #ff9800; }
+            margin-bottom: 10px;
         }
         
         .header p {
-            color: #ffec8b;
+            color: #ffeb3b;
             font-size: 1.1em;
         }
         
-        .feature-grid {
+        .feature-menu {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
         
         .feature-card {
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.8);
             border-radius: 15px;
             padding: 20px;
-            text-align: center;
             cursor: pointer;
-            transition: all 0.3s;
-            border: 1px solid #ffd700;
-            backdrop-filter: blur(5px);
+            transition: transform 0.3s, box-shadow 0.3s;
+            border: 2px solid #ffd700;
         }
         
         .feature-card:hover {
             transform: translateY(-5px);
-            background: rgba(255,215,0,0.2);
-            box-shadow: 0 5px 25px rgba(255,215,0,0.3);
+            box-shadow: 0 10px 30px rgba(255,215,0,0.3);
         }
         
         .feature-card.active {
-            background: linear-gradient(135deg, rgba(255,215,0,0.3), rgba(255,152,0,0.3));
-            border: 2px solid #ffd700;
-            box-shadow: 0 0 20px rgba(255,215,0,0.5);
-        }
-        
-        .feature-card .icon {
-            font-size: 3em;
-            margin-bottom: 10px;
+            background: rgba(255,215,0,0.2);
+            border-color: #ffeb3b;
         }
         
         .feature-card h3 {
             color: #ffd700;
             margin-bottom: 10px;
+            font-size: 1.5em;
         }
         
         .feature-card p {
-            color: #ccc;
+            color: #ddd;
             font-size: 0.9em;
+        }
+        
+        .feature-icon {
+            font-size: 2em;
+            margin-bottom: 10px;
         }
         
         .panel {
             background: rgba(0,0,0,0.85);
             border-radius: 15px;
             padding: 30px;
-            display: none;
-            backdrop-filter: blur(10px);
-            border: 1px solid #ffd700;
             margin-top: 20px;
+            border: 1px solid #ffd700;
         }
         
-        .panel.active {
-            display: block;
-            animation: fadeIn 0.5s;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
+        .panel h2 {
+            color: #ffd700;
+            margin-bottom: 20px;
+            font-size: 1.8em;
         }
         
         .form-group {
@@ -371,7 +350,7 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             font-weight: bold;
         }
         
-        input, select {
+        input, select, textarea {
             width: 100%;
             padding: 12px;
             background: rgba(255,255,255,0.1);
@@ -381,69 +360,74 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             font-size: 14px;
         }
         
-        input[type="file"] {
-            background: rgba(255,255,255,0.1);
-            cursor: pointer;
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #ffeb3b;
+            background: rgba(255,255,255,0.15);
         }
         
         button {
-            background: linear-gradient(135deg, #ffd700, #ff9800);
-            color: #1a3c1a;
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            color: #2d5016;
             padding: 12px 30px;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-size: 16px;
             font-weight: bold;
-            transition: all 0.3s;
+            transition: transform 0.2s;
         }
         
         button:hover {
             transform: scale(1.05);
-            box-shadow: 0 0 15px rgba(255,215,0,0.5);
         }
         
-        .btn-stop {
-            background: linear-gradient(135deg, #dc3545, #c82333);
+        button.danger {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
             color: white;
-            margin-left: 10px;
         }
         
-        .btn-stop:hover {
-            box-shadow: 0 0 15px rgba(220,53,69,0.5);
+        button.success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
         }
         
-        .status-card {
-            margin-top: 20px;
-            padding: 20px;
-            background: rgba(0,0,0,0.5);
+        .status-bar {
+            background: rgba(0,0,0,0.9);
+            padding: 15px;
             border-radius: 10px;
+            margin-top: 20px;
             border-left: 4px solid #ffd700;
+        }
+        
+        .status-bar h4 {
+            color: #ffd700;
+            margin-bottom: 10px;
         }
         
         .status-stats {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 15px;
-            margin-top: 15px;
+            margin-top: 10px;
         }
         
-        .stat-box {
-            background: rgba(0,0,0,0.5);
+        .stat-card {
+            background: rgba(255,215,0,0.1);
             padding: 10px;
             border-radius: 8px;
             text-align: center;
         }
         
-        .stat-value {
-            font-size: 1.8em;
-            font-weight: bold;
+        .stat-card .stat-value {
             color: #ffd700;
+            font-size: 1.5em;
+            font-weight: bold;
         }
         
-        .stat-label {
+        .stat-card .stat-label {
+            color: #ddd;
             font-size: 0.85em;
-            color: #ccc;
             margin-top: 5px;
         }
         
@@ -453,43 +437,32 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
             overflow-y: auto;
         }
         
-        .result-item {
+        .message-item {
+            background: rgba(255,255,255,0.05);
             padding: 10px;
-            border-bottom: 1px solid #333;
-            color: #ccc;
-        }
-        
-        .live-badge {
-            display: inline-block;
-            background: #dc3545;
-            color: white;
-            padding: 3px 8px;
+            margin: 5px 0;
             border-radius: 5px;
-            font-size: 12px;
-            animation: pulse 1s infinite;
+            border-left: 3px solid #ffd700;
         }
         
         @keyframes pulse {
             0% { opacity: 1; }
-            50% { opacity: 0.5; }
+            50% { opacity: 0.7; }
             100% { opacity: 1; }
         }
         
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding: 20px;
-            color: #ffd700;
-            border-top: 1px solid rgba(255,215,0,0.3);
+        .sending-active {
+            animation: pulse 1s infinite;
+            color: #28a745;
         }
         
         @media (max-width: 768px) {
-            .feature-grid {
+            .feature-menu {
                 grid-template-columns: 1fr;
             }
             
-            .status-stats {
-                grid-template-columns: 1fr 1fr;
+            .panel {
+                padding: 20px;
             }
         }
     </style>
@@ -498,47 +471,39 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
     <div class="container">
         <div class="header">
             <h1>🔥 XMARTY AYUSH KING 🔥</h1>
-            <p>⚡ Non-Stop Facebook Automation | 24/7 Uptime | 365 Days ⚡</p>
+            <p>Complete Facebook Automation Suite | 24/7 Operation | 365 Days Uptime</p>
         </div>
         
-        <div class="feature-grid">
+        <div class="feature-menu">
             <div class="feature-card" onclick="showFeature('sender')">
-                <div class="icon">📨</div>
+                <div class="feature-icon">📨</div>
                 <h3>Message Sender</h3>
-                <p>Non-stop automated message sending</p>
+                <p>Send mass messages automatically with multiple tokens</p>
             </div>
             <div class="feature-card" onclick="showFeature('checker')">
-                <div class="icon">✓</div>
+                <div class="feature-icon">✅</div>
                 <h3>Token Checker</h3>
-                <p>Check Facebook token validity</p>
+                <p>Check validity of Facebook access tokens</p>
             </div>
             <div class="feature-card" onclick="showFeature('extractor')">
-                <div class="icon">💬</div>
+                <div class="feature-icon">💬</div>
                 <h3>Chat Extractor</h3>
-                <p>Extract messages from threads</p>
+                <p>Extract messages from any messenger chat</p>
             </div>
-            <div class="feature-card" onclick="showFeature('status-check')">
-                <div class="icon">📊</div>
+            <div class="feature-card" onclick="showFeature('status')">
+                <div class="feature-icon">📊</div>
                 <h3>Status Check</h3>
-                <p>Check thread accessibility</p>
+                <p>Monitor sending status and statistics</p>
             </div>
         </div>
         
         <!-- Message Sender Panel -->
-        <div id="sender" class="panel">
-            <h2 style="color:#ffd700; margin-bottom:20px">📨 Non-Stop Message Sender</h2>
+        <div id="senderPanel" class="panel" style="display: none;">
+            <h2>📨 Mass Message Sender</h2>
             <form id="senderForm" enctype="multipart/form-data">
                 <div class="form-group">
-                    <label>Thread ID / Convo ID:</label>
-                    <input type="text" name="threadId" placeholder="Enter thread ID" required>
-                </div>
-                <div class="form-group">
-                    <label>Prefix / Hater Name:</label>
-                    <input type="text" name="kidx" placeholder="Name to prefix" required>
-                </div>
-                <div class="form-group">
-                    <label>Speed (Seconds):</label>
-                    <input type="number" name="time" value="60" required>
+                    <label>Conversation ID:</label>
+                    <input type="text" name="threadId" required placeholder="Enter thread/conversation ID">
                 </div>
                 <div class="form-group">
                     <label>Tokens File (.txt):</label>
@@ -548,224 +513,259 @@ with open('templates/index.html', 'w', encoding='utf-8') as f:
                     <label>Messages File (.txt):</label>
                     <input type="file" name="messagesFile" accept=".txt" required>
                 </div>
-                <button type="submit">▶ Start Non-Stop</button>
-                <button type="button" class="btn-stop" onclick="stopSending()">⏹ Stop</button>
-            </form>
-            <div id="senderStatus" style="display:none">
-                <div class="status-card">
-                    <h3 style="color:#ffd700">📊 Live Statistics <span class="live-badge">LIVE</span></h3>
-                    <div id="stats" class="status-stats"></div>
+                <div class="form-group">
+                    <label>Hater Name/Prefix:</label>
+                    <input type="text" name="kidx" required placeholder="Enter prefix for messages">
                 </div>
-            </div>
+                <div class="form-group">
+                    <label>Speed (seconds between messages):</label>
+                    <input type="number" name="time" value="60" required>
+                </div>
+                <button type="submit" class="success">▶ Start Sending</button>
+                <button type="button" onclick="stopSending()" class="danger" style="margin-left: 10px;">⏹ Stop Sending</button>
+            </form>
+            <div id="senderStatus"></div>
         </div>
         
         <!-- Token Checker Panel -->
-        <div id="checker" class="panel">
-            <h2 style="color:#ffd700; margin-bottom:20px">✓ Facebook Token Checker</h2>
+        <div id="checkerPanel" class="panel" style="display: none;">
+            <h2>✅ Token Checker</h2>
             <form id="checkerForm" enctype="multipart/form-data">
                 <div class="form-group">
-                    <label>Upload Tokens File (.txt):</label>
-                    <input type="file" name="tokenFile" accept=".txt" required>
+                    <label>Tokens File (.txt):</label>
+                    <input type="file" name="txtFile" accept=".txt" required>
                 </div>
-                <button type="submit">Check Tokens</button>
+                <button type="submit">🔍 Check Tokens</button>
             </form>
             <div id="checkerResults" class="results"></div>
         </div>
         
         <!-- Chat Extractor Panel -->
-        <div id="extractor" class="panel">
-            <h2 style="color:#ffd700; margin-bottom:20px">💬 Messenger Chat Extractor</h2>
+        <div id="extractorPanel" class="panel" style="display: none;">
+            <h2>💬 Messenger Chat Extractor</h2>
             <form id="extractorForm">
                 <div class="form-group">
                     <label>Access Token:</label>
-                    <input type="text" name="accessToken" required>
+                    <input type="text" name="accessToken" required placeholder="Enter Facebook access token">
                 </div>
                 <div class="form-group">
-                    <label>Thread ID:</label>
-                    <input type="text" name="threadId" required>
+                    <label>Thread/Conversation ID:</label>
+                    <input type="text" name="threadId" required placeholder="Enter thread ID">
                 </div>
                 <div class="form-group">
-                    <label>Message Limit:</label>
-                    <input type="number" name="limit" value="50">
+                    <label>Number of Messages:</label>
+                    <select name="limit">
+                        <option value="20">20 messages</option>
+                        <option value="50" selected>50 messages</option>
+                        <option value="100">100 messages</option>
+                    </select>
                 </div>
-                <button type="submit">Extract Messages</button>
+                <button type="submit">📥 Extract Messages</button>
             </form>
             <div id="extractorResults" class="results"></div>
         </div>
         
-        <!-- Status Check Panel -->
-        <div id="status-check" class="panel">
-            <h2 style="color:#ffd700; margin-bottom:20px">📊 Thread Status Checker</h2>
-            <form id="statusForm">
-                <div class="form-group">
-                    <label>Thread ID:</label>
-                    <input type="text" name="threadId" required>
+        <!-- Status Panel -->
+        <div id="statusPanel" class="panel" style="display: none;">
+            <h2>📊 Real-time Status</h2>
+            <div class="status-bar">
+                <h4 id="statusTitle">Current Status: <span id="sendingStatus">Idle</span></h4>
+                <div class="status-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalSent">0</div>
+                        <div class="stat-label">Total Sent</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="successCount">0</div>
+                        <div class="stat-label">Successful</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="failedCount">0</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="errorCount">0</div>
+                        <div class="stat-label">Errors</div>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Access Token (Optional):</label>
-                    <input type="text" name="accessToken">
+                <div style="margin-top: 15px;">
+                    <p><strong>Last Message:</strong> <span id="lastMessage">-</span></p>
+                    <p><strong>Last Time:</strong> <span id="lastTime">-</span></p>
+                    <p><strong>Active Tokens:</strong> <span id="validTokens">0</span></p>
+                    <p><strong>Messages Loaded:</strong> <span id="messagesCount">0</span></p>
                 </div>
-                <button type="submit">Check Status</button>
-            </form>
-            <div id="statusResults" class="results"></div>
-        </div>
-        
-        <div class="footer">
-            <p>⚡ Non-Stop Operation | Auto Retry | Error Recovery | 24/7 Uptime ⚡</p>
-            <p>Made by Xmarty Ayush King 👑</p>
+            </div>
+            <button onclick="refreshStatus()" style="margin-top: 15px;">🔄 Refresh Status</button>
         </div>
     </div>
     
     <script>
-        let statusInterval = null;
+        let currentFeature = null;
         
         function showFeature(feature) {
-            document.querySelectorAll('.panel').forEach(panel => {
-                panel.classList.remove('active');
-            });
+            // Hide all panels
+            document.getElementById('senderPanel').style.display = 'none';
+            document.getElementById('checkerPanel').style.display = 'none';
+            document.getElementById('extractorPanel').style.display = 'none';
+            document.getElementById('statusPanel').style.display = 'none';
+            
+            // Show selected panel
+            document.getElementById(feature + 'Panel').style.display = 'block';
+            
+            // Update active card style
             document.querySelectorAll('.feature-card').forEach(card => {
                 card.classList.remove('active');
             });
-            document.getElementById(feature).classList.add('active');
             event.currentTarget.classList.add('active');
+            
+            currentFeature = feature;
+            
+            // Auto-refresh status if status panel is shown
+            if (feature === 'status') {
+                refreshStatus();
+                if (window.statusInterval) clearInterval(window.statusInterval);
+                window.statusInterval = setInterval(refreshStatus, 2000);
+            } else {
+                if (window.statusInterval) clearInterval(window.statusInterval);
+            }
         }
         
+        // Message Sender
         document.getElementById('senderForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = new FormData(e.target);
             
             const response = await fetch('/start_sending', {
-                method: 'POST', body: formData
+                method: 'POST',
+                body: formData
             });
             
             const result = await response.json();
-            if (result.message) {
-                alert(result.message + '\\nTokens: ' + result.tokens + '\\nMessages: ' + result.messages);
-                document.getElementById('senderStatus').style.display = 'block';
-                startStatusUpdate();
+            alert(result.message);
+            if (result.status === 'success') {
+                showFeature('status');
+            }
+        });
+        
+        // Token Checker
+        document.getElementById('checkerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            const response = await fetch('/check_tokens', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            const resultsDiv = document.getElementById('checkerResults');
+            
+            if (result.status === 'success') {
+                let html = `<h3>Results: ${result.valid}/${result.total} valid tokens</h3>`;
+                html += '<div style="max-height: 300px; overflow-y: auto;">';
+                result.results.forEach(token => {
+                    if (token.valid) {
+                        html += `<div class="message-item" style="border-left-color: #28a745;">✅ Token ${token.index}: Valid (${token.name})</div>`;
+                    } else {
+                        html += `<div class="message-item" style="border-left-color: #dc3545;">❌ Token ${token.index}: Invalid</div>`;
+                    }
+                });
+                html += '</div>';
+                resultsDiv.innerHTML = html;
             } else {
-                alert('Error: ' + (result.error || 'Unknown error'));
+                resultsDiv.innerHTML = `<div class="message-item">Error: ${result.message}</div>`;
+            }
+        });
+        
+        // Chat Extractor
+        document.getElementById('extractorForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            
+            const response = await fetch('/extract_messages', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            const resultsDiv = document.getElementById('extractorResults');
+            
+            if (result.status === 'success') {
+                let html = `<h3>Extracted ${result.count} messages:</h3>`;
+                html += '<div style="max-height: 400px; overflow-y: auto;">';
+                result.messages.forEach(msg => {
+                    html += `<div class="message-item">
+                        <strong>${msg.from || 'Unknown'}</strong> (${new Date(msg.time).toLocaleString()})<br>
+                        ${msg.message || '[No text]'}
+                    </div>`;
+                });
+                html += '</div>';
+                resultsDiv.innerHTML = html;
+            } else {
+                resultsDiv.innerHTML = `<div class="message-item">Error: ${result.message}</div>`;
             }
         });
         
         async function stopSending() {
-            const response = await fetch('/stop_sending', { method: 'POST' });
+            const response = await fetch('/stop_sending', {
+                method: 'POST'
+            });
             const result = await response.json();
             alert(result.message);
-            if (statusInterval) {
-                clearInterval(statusInterval);
-                statusInterval = null;
-            }
+            refreshStatus();
         }
         
-        function startStatusUpdate() {
-            if (statusInterval) clearInterval(statusInterval);
-            statusInterval = setInterval(async () => {
-                const response = await fetch('/status');
-                const status = await response.json();
-                
-                document.getElementById('stats').innerHTML = `
-                    <div class="stat-box">
-                        <div class="stat-value">${status.running ? '🟢' : '🔴'}</div>
-                        <div class="stat-label">Status</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${status.total_sent || 0}</div>
-                        <div class="stat-label">Total Sent</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${status.failed_messages || 0}</div>
-                        <div class="stat-label">Failed</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${status.errors || 0}</div>
-                        <div class="stat-label">Errors</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${status.elapsed_hours || 0}h</div>
-                        <div class="stat-label">Uptime</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">${status.rate_per_minute || 0}/min</div>
-                        <div class="stat-label">Speed</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">Token ${status.current_token_index || 0}</div>
-                        <div class="stat-label">Current Token</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value">Msg ${status.current_message_index || 0}</div>
-                        <div class="stat-label">Current Message</div>
-                    </div>
-                `;
-            }, 2000);
+        async function refreshStatus() {
+            const response = await fetch('/status');
+            const status = await response.json();
+            
+            const statusSpan = document.getElementById('sendingStatus');
+            if (status.active) {
+                statusSpan.innerHTML = '<span class="sending-active">🔴 SENDING ACTIVE</span>';
+            } else {
+                statusSpan.innerHTML = '⚪ Idle';
+            }
+            
+            document.getElementById('totalSent').innerText = status.stats.total_sent || 0;
+            document.getElementById('successCount').innerText = status.stats.success || 0;
+            document.getElementById('failedCount').innerText = status.stats.failed || 0;
+            document.getElementById('errorCount').innerText = status.stats.errors || 0;
+            document.getElementById('lastMessage').innerText = status.stats.last_message || '-';
+            document.getElementById('lastTime').innerText = status.stats.last_time || '-';
+            document.getElementById('validTokens').innerText = status.stats.valid_tokens || 0;
+            document.getElementById('messagesCount').innerText = status.stats.messages_count || 0;
         }
         
-        document.getElementById('checkerForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const response = await fetch('/check_tokens', { method: 'POST', body: formData });
-            const result = await response.json();
-            const resultsDiv = document.getElementById('checkerResults');
-            if (result.results) {
-                resultsDiv.innerHTML = `<h3>Results:</h3>${result.results.map(r => `<div class="result-item">${r.index}. ${r.status}</div>`).join('')}`;
+        // Auto-refresh status every 2 seconds if on status panel
+        setInterval(() => {
+            if (currentFeature === 'status') {
+                refreshStatus();
             }
-        });
+        }, 2000);
         
-        document.getElementById('extractorForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const response = await fetch('/extract_chat', { method: 'POST', body: formData });
-            const result = await response.json();
-            const resultsDiv = document.getElementById('extractorResults');
-            if (result.success) {
-                resultsDiv.innerHTML = `<h3>Messages (${result.message_count}):</h3>${result.messages.map(msg => `<div class="result-item"><strong>${msg.from}</strong>: ${msg.message}</div>`).join('')}`;
-            }
-        });
-        
-        document.getElementById('statusForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-            const response = await fetch('/status_check', { method: 'POST', body: formData });
-            const result = await response.json();
-            document.getElementById('statusResults').innerHTML = `<div class="result-item">Status: ${result.status}</div>`;
-        });
-        
+        // Show default feature
         showFeature('sender');
-        
-        // Auto-refresh check every 5 minutes
-        setInterval(async () => {
-            const response = await fetch('/health');
-            const data = await response.json();
-            if (!data.running && data.running !== undefined) {
-                console.log('Bot is not running, but health is good');
-            }
-        }, 300000);
     </script>
 </body>
 </html>
     ''')
 
-# Other endpoints
-@app.route('/check_tokens', methods=['POST'])
-def check_tokens():
-    token_file = request.files.get('tokenFile')
-    if not token_file:
-        return jsonify({'error': 'No file uploaded'}), 400
-    tokens = token_file.read().decode().splitlines()
-    results = []
-    for i, token in enumerate(tokens[:20]):  # Limit to 20 for speed
-        results.append({'index': i+1, 'status': 'Checked'})
-    return jsonify({'results': results})
+# Create templates directory if not exists
+if not os.path.exists('templates'):
+    os.makedirs('templates')
 
-@app.route('/extract_chat', methods=['POST'])
-def extract_chat():
-    return jsonify({'success': True, 'message_count': 0, 'messages': []})
+# Create a keep-alive mechanism for 24/7 operation
+def keep_alive():
+    """Keep the server running continuously"""
+    while True:
+        time.sleep(300)  # Check every 5 minutes
+        # You can add health checks here
 
-@app.route('/status_check', methods=['POST'])
-def status_check_func():
-    return jsonify({'status': 'Active', 'thread_id': request.form.get('threadId')})
+# Start keep-alive thread
+keep_alive_thread = threading.Thread(target=keep_alive)
+keep_alive_thread.daemon = True
+keep_alive_thread.start()
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, threaded=True, debug=False)
+    # Run with debug=False for production
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
