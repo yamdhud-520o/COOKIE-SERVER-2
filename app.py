@@ -26,7 +26,7 @@ headers = {
     'referer': 'https://www.google.com'
 }
 
-# HTML Template
+# HTML Template with Dark Pink + Dark Yellow Theme
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -42,12 +42,14 @@ HTML_TEMPLATE = '''
         }
         
         body {
-            background: linear-gradient(135deg, #1a3c0a 0%, #2d1f00 100%);
+            background: linear-gradient(135deg, #800020 0%, #8B0000 25%, #B8860B 50%, #DAA520 75%, #800020 100%);
+            background-attachment: fixed;
             font-family: 'Courier New', 'Segoe UI', monospace;
             min-height: 100vh;
             padding: 20px;
         }
         
+        /* Dark Pink and Dark Yellow Theme */
         .container {
             max-width: 1300px;
             margin: 0 auto;
@@ -56,24 +58,29 @@ HTML_TEMPLATE = '''
         .header {
             text-align: center;
             padding: 30px;
-            background: rgba(0,0,0,0.6);
+            background: linear-gradient(135deg, rgba(139,0,0,0.9) 0%, rgba(184,134,11,0.9) 100%);
             border-radius: 20px;
             margin-bottom: 30px;
-            border: 2px solid #ffd700;
-            box-shadow: 0 0 20px rgba(255,215,0,0.3);
+            border: 2px solid #FFD700;
+            box-shadow: 0 0 30px rgba(255,215,0,0.5);
+            backdrop-filter: blur(5px);
         }
         
         .header h1 {
-            color: #ffd700;
-            font-size: 2.5em;
+            background: linear-gradient(135deg, #FFD700 0%, #FF69B4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 2.8em;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
             letter-spacing: 2px;
         }
         
         .header p {
-            color: #ffeb3b;
+            color: #FFD700;
             margin-top: 10px;
             font-size: 1.1em;
+            text-shadow: 1px 1px 2px #800020;
         }
         
         .feature-grid {
@@ -84,57 +91,61 @@ HTML_TEMPLATE = '''
         }
         
         .feature-btn {
-            background: linear-gradient(135deg, #2d5016 0%, #1a3009 100%);
-            border: 2px solid #ffd700;
+            background: linear-gradient(135deg, rgba(139,0,0,0.85) 0%, rgba(184,134,11,0.85) 100%);
+            border: 2px solid #FFD700;
             border-radius: 15px;
             padding: 25px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
         }
         
         .feature-btn:hover {
             transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(255,215,0,0.4);
-            background: linear-gradient(135deg, #3a6b1e 0%, #2d1f00 100%);
+            box-shadow: 0 10px 30px rgba(255,215,0,0.5);
+            background: linear-gradient(135deg, rgba(184,134,11,0.95) 0%, rgba(139,0,0,0.95) 100%);
         }
         
         .feature-btn.active {
-            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            background: linear-gradient(135deg, #FFD700 0%, #FF69B4 100%);
             border-color: #fff;
         }
         
         .feature-btn.active h3,
         .feature-btn.active p {
-            color: #1a3009;
+            color: #800020;
         }
         
         .feature-btn h3 {
-            color: #ffd700;
+            color: #FFD700;
             font-size: 1.8em;
             margin-bottom: 10px;
         }
         
         .feature-btn p {
-            color: #ccc;
+            color: #FFB6C1;
             font-size: 0.9em;
         }
         
         .panel {
-            background: rgba(0,0,0,0.85);
+            background: linear-gradient(135deg, rgba(139,0,0,0.9) 0%, rgba(184,134,11,0.9) 100%);
             border-radius: 20px;
             padding: 30px;
-            border: 2px solid #ffd700;
+            border: 2px solid #FFD700;
             margin-top: 20px;
             display: none;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 0 20px rgba(255,215,0,0.3);
         }
         
         .panel h2 {
-            color: #ffd700;
+            color: #FFD700;
             margin-bottom: 25px;
             font-size: 2em;
-            border-left: 5px solid #ffd700;
+            border-left: 5px solid #FF69B4;
             padding-left: 15px;
+            text-shadow: 1px 1px 2px #800020;
         }
         
         .form-group {
@@ -142,7 +153,7 @@ HTML_TEMPLATE = '''
         }
         
         label {
-            color: #ffd700;
+            color: #FFD700;
             display: block;
             margin-bottom: 8px;
             font-weight: bold;
@@ -152,22 +163,23 @@ HTML_TEMPLATE = '''
         input, select, textarea, input[type="file"] {
             width: 100%;
             padding: 12px;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid #ffd700;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #FFD700;
             border-radius: 10px;
-            color: white;
+            color: #FFD700;
             font-size: 14px;
         }
         
         input:focus, select:focus {
             outline: none;
-            border-color: #ffeb3b;
-            background: rgba(255,255,255,0.2);
+            border-color: #FF69B4;
+            background: rgba(0,0,0,0.7);
+            box-shadow: 0 0 10px rgba(255,105,180,0.5);
         }
         
         button {
-            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
-            color: #1a3009;
+            background: linear-gradient(135deg, #FFD700 0%, #FF69B4 100%);
+            color: #800020;
             padding: 12px 30px;
             border: none;
             border-radius: 10px;
@@ -180,17 +192,17 @@ HTML_TEMPLATE = '''
         
         button:hover {
             transform: scale(1.05);
-            box-shadow: 0 5px 15px rgba(255,215,0,0.4);
+            box-shadow: 0 5px 20px rgba(255,215,0,0.5);
         }
         
         button.danger {
-            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-            color: white;
+            background: linear-gradient(135deg, #DC143C 0%, #8B0000 100%);
+            color: #FFD700;
         }
         
         button.success {
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            color: white;
+            background: linear-gradient(135deg, #228B22 0%, #DAA520 100%);
+            color: #FFD700;
         }
         
         .status-card {
@@ -198,7 +210,7 @@ HTML_TEMPLATE = '''
             padding: 20px;
             border-radius: 15px;
             margin-top: 20px;
-            border-left: 4px solid #ffd700;
+            border-left: 4px solid #FF69B4;
         }
         
         .stats-grid {
@@ -211,18 +223,19 @@ HTML_TEMPLATE = '''
         .stat-item {
             text-align: center;
             padding: 15px;
-            background: rgba(255,215,0,0.1);
+            background: linear-gradient(135deg, rgba(139,0,0,0.5) 0%, rgba(184,134,11,0.5) 100%);
             border-radius: 10px;
+            border: 1px solid #FFD700;
         }
         
         .stat-value {
-            color: #ffd700;
+            color: #FFD700;
             font-size: 2em;
             font-weight: bold;
         }
         
         .stat-label {
-            color: #ccc;
+            color: #FFB6C1;
             margin-top: 5px;
             font-size: 0.85em;
         }
@@ -234,29 +247,47 @@ HTML_TEMPLATE = '''
         }
         
         .message-item {
-            background: rgba(255,255,255,0.05);
+            background: rgba(0,0,0,0.5);
             padding: 10px;
             margin: 5px 0;
             border-radius: 8px;
-            border-left: 3px solid #ffd700;
+            border-left: 3px solid #FF69B4;
+            color: #FFD700;
         }
         
         .sending-active {
             animation: pulse 1s infinite;
-            color: #28a745 !important;
+            color: #FF69B4 !important;
         }
         
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
+            0%, 100% { opacity: 1; text-shadow: 0 0 5px #FFD700; }
+            50% { opacity: 0.7; text-shadow: 0 0 15px #FF69B4; }
         }
         
         .footer {
             text-align: center;
             margin-top: 30px;
             padding: 20px;
-            color: #ffd700;
-            border-top: 1px solid #ffd700;
+            color: #FFD700;
+            border-top: 1px solid #FF69B4;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #800020;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #FFD700;
+            border-radius: 5px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #FF69B4;
         }
         
         @media (max-width: 768px) {
@@ -267,6 +298,10 @@ HTML_TEMPLATE = '''
             .panel {
                 padding: 20px;
             }
+            
+            .header h1 {
+                font-size: 1.8em;
+            }
         }
     </style>
 </head>
@@ -275,7 +310,7 @@ HTML_TEMPLATE = '''
         <div class="header">
             <h1>🔥 XMARTY AYUSH KING 🔥</h1>
             <p>Complete Facebook Automation Suite | 24/7 • 365 Days Uptime</p>
-            <p style="font-size: 12px; margin-top: 10px;">⚡ Offline Mode Ready • Auto-Recovery ⚡</p>
+            <p style="font-size: 12px; margin-top: 10px;">⚡ Dark Pink & Dark Yellow Edition ⚡</p>
         </div>
         
         <div class="feature-grid">
@@ -370,7 +405,7 @@ HTML_TEMPLATE = '''
         <div id="statusPanel" class="panel">
             <h2>📊 REAL-TIME STATUS</h2>
             <div class="status-card">
-                <h3 id="statusTitle">Status: <span id="sendingStatus">⚪ IDLE</span></h3>
+                <h3 style="color: #FFD700;">Status: <span id="sendingStatus">⚪ IDLE</span></h3>
                 <div class="stats-grid">
                     <div class="stat-item">
                         <div class="stat-value" id="totalSent">0</div>
@@ -389,18 +424,18 @@ HTML_TEMPLATE = '''
                         <div class="stat-label">Errors</div>
                     </div>
                 </div>
-                <div style="margin-top: 15px;">
-                    <p>📝 Last: <span id="lastMessage">-</span></p>
-                    <p>⏰ Time: <span id="lastTime">-</span></p>
-                    <p>🔑 Valid Tokens: <span id="validTokens">0</span></p>
-                    <p>💬 Messages Loaded: <span id="messagesCount">0</span></p>
+                <div style="margin-top: 15px; color: #FFB6C1;">
+                    <p>📝 Last: <span id="lastMessage" style="color:#FFD700;">-</span></p>
+                    <p>⏰ Time: <span id="lastTime" style="color:#FFD700;">-</span></p>
+                    <p>🔑 Valid Tokens: <span id="validTokens" style="color:#FFD700;">0</span></p>
+                    <p>💬 Messages Loaded: <span id="messagesCount" style="color:#FFD700;">0</span></p>
                 </div>
             </div>
             <button onclick="refreshStatus()">🔄 REFRESH</button>
         </div>
         
         <div class="footer">
-            <p>© 2026 XMARTY AYUSH KING | 24/7 AUTOMATION | 365 DAYS UPTIME</p>
+            <p>© 2026 XMARTY AYUSH KING | Dark Pink & Dark Yellow Edition | 24/7 AUTOMATION</p>
         </div>
     </div>
     
@@ -454,12 +489,12 @@ HTML_TEMPLATE = '''
             const resultsDiv = document.getElementById('checkerResults');
             
             if (result.status === 'success') {
-                let html = `<h3>✅ ${result.valid}/${result.total} Valid Tokens</h3>`;
+                let html = `<h3 style="color:#FFD700;">✅ ${result.valid}/${result.total} Valid Tokens</h3>`;
                 result.results.forEach(token => {
                     if (token.valid) {
-                        html += `<div class="message-item" style="border-left-color: #28a745;">✅ Token ${token.index}: VALID (${token.name})</div>`;
+                        html += `<div class="message-item" style="border-left-color: #228B22;">✅ Token ${token.index}: VALID (${token.name})</div>`;
                     } else {
-                        html += `<div class="message-item" style="border-left-color: #dc3545;">❌ Token ${token.index}: INVALID</div>`;
+                        html += `<div class="message-item" style="border-left-color: #DC143C;">❌ Token ${token.index}: INVALID</div>`;
                     }
                 });
                 resultsDiv.innerHTML = html;
@@ -479,16 +514,16 @@ HTML_TEMPLATE = '''
             const resultsDiv = document.getElementById('extractorResults');
             
             if (result.status === 'success') {
-                let html = `<h3>📥 ${result.count} Messages Extracted</h3>`;
+                let html = `<h3 style="color:#FFD700;">📥 ${result.count} Messages Extracted</h3>`;
                 result.messages.forEach(msg => {
                     html += `<div class="message-item">
-                        <strong>${msg.from || 'Unknown'}</strong> - ${new Date(msg.time).toLocaleString()}<br>
+                        <strong style="color:#FF69B4;">${msg.from || 'Unknown'}</strong> <span style="color:#FFD700;">-</span> ${new Date(msg.time).toLocaleString()}<br>
                         ${msg.message || '[No Text]'}
                     </div>`;
                 });
                 resultsDiv.innerHTML = html;
             } else {
-                resultsDiv.innerHTML = `<div class="message-item">❌ ${result.message}</div>`;
+                resultsDiv.innerHTML = `<div class="message-item" style="border-left-color:#DC143C;">❌ ${result.message}</div>`;
             }
         });
         
@@ -572,7 +607,6 @@ def send_messages_worker(thread_id, haters_name, speed, tokens, messages):
     post_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
     msg_count = len(messages)
     token_count = len(tokens)
-    msg_index = 0
     
     while sending_active:
         try:
@@ -635,7 +669,7 @@ def start_sending():
     
     # Validate tokens
     valid_tokens = []
-    for token in tokens[:10]:  # Check first 10 tokens
+    for token in tokens[:10]:
         is_valid, name = check_token_validity(token)
         if is_valid:
             valid_tokens.append(token)
@@ -737,7 +771,7 @@ if __name__ == '__main__':
     print("""
     ╔══════════════════════════════════════════╗
     ║     XMARTY AYUSH KING - SERVER v2.0      ║
-    ║     Facebook Automation Suite            ║
+    ║     Dark Pink & Dark Yellow Edition      ║
     ║     Port: 5000 | 24/7 Operation         ║
     ╚══════════════════════════════════════════╝
     """)
