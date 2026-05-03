@@ -33,7 +33,7 @@ HTML_TEMPLATE = '''
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XMARTY AYUSH KING - Facebook Tool Suite</title>
+    <title>𝟗𝐌𝐀𝐍-𝐗-𝐘𝐀𝐌𝐃𝐇𝐔𝐃</title>
     <style>
         * {
             margin: 0;
@@ -308,36 +308,36 @@ HTML_TEMPLATE = '''
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔥 XMARTY AYUSH KING 🔥</h1>
-            <p>Complete Facebook Automation Suite | 24/7 • 365 Days Uptime</p>
-            <p style="font-size: 12px; margin-top: 10px;">⚡ Dark Pink & Dark Yellow Edition ⚡</p>
+            <h1>𝟗𝐌𝐀𝐍-𝐗-𝐘𝐀𝐌𝐃𝐇𝐔𝐃</h1>
+            <p>FACEBOOK MASSAGE SENDER</p>
+            <p style="font-size: 12px; margin-top: 10px;">⚜️9MAN-x-YAMDHUD⚜️</p>
         </div>
         
         <div class="feature-grid">
             <div class="feature-btn" onclick="showPanel('sender')">
-                <h3>📨 MSG SENDER</h3>
+                <h3>📨MASSAGE SENDER</h3>
                 <p>Mass message sender with multi-token support</p>
             </div>
             <div class="feature-btn" onclick="showPanel('checker')">
-                <h3>✅ TOKEN CHECKER</h3>
+                <h3>✅TOKEN CHECKER</h3>
                 <p>Validate Facebook access tokens</p>
             </div>
             <div class="feature-btn" onclick="showPanel('extractor')">
-                <h3>💬 CHAT EXTRACTOR</h3>
+                <h3>💬CHAT EXTRACTOR</h3>
                 <p>Extract messages from any conversation</p>
             </div>
             <div class="feature-btn" onclick="showPanel('status')">
-                <h3>📊 STATUS</h3>
+                <h3>📊STATUS</h3>
                 <p>Real-time monitoring & statistics</p>
             </div>
         </div>
         
         <!-- Sender Panel -->
         <div id="senderPanel" class="panel">
-            <h2>📨 MESSAGE SENDER</h2>
+            <h2>📨MESSAGE SENDER</h2>
             <form id="senderForm" enctype="multipart/form-data">
                 <div class="form-group">
-                    <label>🔑 Conversation/Thread ID:</label>
+                    <label>🔑 Conversation group ID:</label>
                     <input type="text" name="threadId" required placeholder="Enter thread/conversation ID">
                 </div>
                 <div class="form-group">
@@ -380,11 +380,11 @@ HTML_TEMPLATE = '''
             <h2>💬 CHAT EXTRACTOR</h2>
             <form id="extractorForm">
                 <div class="form-group">
-                    <label>🔑 Access Token:</label>
+                    <label>🔑Access Token:</label>
                     <input type="text" name="accessToken" required placeholder="Enter Facebook access token">
                 </div>
                 <div class="form-group">
-                    <label>💬 Thread ID:</label>
+                    <label>💬Thread ID:</label>
                     <input type="text" name="threadId" required placeholder="Enter thread/conversation ID">
                 </div>
                 <div class="form-group">
@@ -435,7 +435,7 @@ HTML_TEMPLATE = '''
         </div>
         
         <div class="footer">
-            <p>© 2026 XMARTY AYUSH KING | Dark Pink & Dark Yellow Edition | 24/7 AUTOMATION</p>
+            <p>© made by 9MAN-X-YAMDHUD____CHUT KA PIYASA</p>
         </div>
     </div>
     
